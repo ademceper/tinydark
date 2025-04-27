@@ -1,0 +1,1292 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// `User` tablosu, sistemdeki her bir kullanıcıyı temsil eder. Kullanıcının kimlik bilgileri, doğrulama bilgileri, aktiviteleri ve ilişkili verileri bu tabloda saklanır.
+model User {
+  id String @id @default(cuid()) // Kullanıcının benzersiz kimliği. Otomatik olarak `cuid()` ile oluşturulur.
+
+  email    String @unique // Kullanıcının benzersiz e-posta adresi.
+  password String // Kullanıcının şifresi, genellikle hash'lenmiş olarak saklanır.
+
+  fullName      String // Kullanıcının tam adı.
+  title    String? // Kullanıcının iş unvanı. İsteğe bağlı bir alandır.
+
+  avatar   Media?  @relation("UserAvatar", fields: [avatarId], references: [id]) // Kullanıcının profil resmi. `Media` tablosuyla ilişkili.
+  avatarId String? @unique // Profil resminin ID'si. `avatar` ile ilişkili.
+
+  coverImage   Media?  @relation("UserCoverImage", fields: [coverImageId], references: [id]) // Kullanıcının kapak resmi. `Media` tablosuyla ilişkili.
+  coverImageId String? @unique // Kapak resminin ID'si. `coverImage` ile ilişkili.
+
+  timezone String @default("UTC") // Kullanıcının zaman dilimi. Varsayılan olarak "UTC" gelir.
+  locale   String @default("en-US") // Kullanıcının dil ve bölge ayarı. Varsayılan olarak "en-US" gelir.
+
+  isVerified Boolean @default(false) // Kullanıcı e-posta doğrulaması yaptı mı? Varsayılan değeri `false`.
+  isActive   Boolean @default(true) // Kullanıcı aktif mi? Varsayılan değeri `true`.
+
+  lastPasswordChangeAt DateTime? // Kullanıcının şifre değiştirme zamanı.
+  loginAttempts        Int       @default(0) // Kullanıcının başarısız giriş denemeleri.
+  failedLoginAt        DateTime? // Son başarısız giriş tarihi.
+  isLocked             Boolean   @default(false) // Hesap kilitli mi?
+
+  lastLoginAt     DateTime? // Kullanıcının son giriş zamanı. Zaman damgası olarak saklanır.
+  lastActivityAt  DateTime? // Kullanıcının son aktivite zamanı. Zaman damgası olarak saklanır.
+  emailVerifiedAt DateTime? // Kullanıcının e-posta doğrulama zamanı. E-posta doğrulandıysa bu tarih kaydedilir.
+
+  twoFactorEnabled Boolean @default(false) // Kullanıcı iki faktörlü kimlik doğrulama kullanıyor mu? Varsayılan değeri `false`.
+  metadata         Json? // Kullanıcıya ait ek veriler, JSON formatında saklanabilir.
+
+  createdAt DateTime  @default(now()) // Kullanıcının oluşturulma zamanı.
+  updatedAt DateTime  @updatedAt // Kullanıcının son güncellenme zamanı.
+  deletedAt DateTime? // Kullanıcı silinme zamanı (yumuşak silme için). 
+
+  // Kimlik doğrulama ilişkileri
+  sessions         Session[] // Kullanıcı oturumları. Kullanıcının aktif oturumları bu tabloda saklanır.
+  refreshTokens    RefreshToken[] // Yenileme tokenları. Kullanıcıların oturumlarını yenileyebilmeleri için kullanılan tokenlar.
+  twoFactorMethods TwoFactorMethod[] // İki faktörlü kimlik doğrulama yöntemleri. Kullanıcılar için etkinleştirilen doğrulama yöntemleri.
+  socialAccounts   SocialAccount[] // Sosyal medya hesapları. Kullanıcıların sosyal medya hesaplarıyla bağlanabileceği bilgiler.
+  twoFactorTokens   TwoFactorToken[]
+
+  // Organizasyon ilişkileri
+  ownedOrganizations Organization[]       @relation("OrganizationOwner") // Kullanıcının sahip olduğu organizasyonlar. Bir kullanıcı birden fazla organizasyona sahip olabilir.
+  memberships        OrganizationMember[] // Kullanıcının üye olduğu organizasyonlar. Bir kullanıcı birden fazla organizasyona üye olabilir.
+  permissions        Permission[] // Kullanıcı izinleri. Kullanıcının organizasyonlar ve projeler üzerindeki izinleri.
+
+  // Diğer ilişkiler
+  auditLogs           AuditLog[] // Denetim kayıtları. Kullanıcı ile ilgili denetim (audit) işlemleri.
+  invitationsSent     Invitation[]     @relation("Inviter") // Kullanıcı tarafından gönderilen davetiyeler.
+  invitationsReceived Invitation[]     @relation("Invitee") // Kullanıcıya gönderilen davetiyeler.
+  teamMemberships     TeamMember[] // Kullanıcının üye olduğu takımlar.
+  comments            Comment[] // Kullanıcı tarafından yapılan yorumlar.
+  assignedTasks       TaskAssignee[] // Kullanıcıya atanan görevler.
+  createdTasks        Task[]           @relation("TaskCreator") // Kullanıcı tarafından oluşturulan görevler.
+  notifications       Notification[] // Kullanıcıya gönderilen bildirimler.
+  preferences         UserPreference[] // Kullanıcı tercihleri.
+  userSkills          UserSkill[] // Kullanıcının sahip olduğu yetenekler.
+
+  // Kullanıcının kendi yaptığı izin başvuruları
+  requestedTimeOffs TimeOffRequest[] @relation("RequestedTimeOffs") // Kullanıcı tarafından yapılan izin başvuruları.
+
+  reportsToId   String? // Kullanıcının rapor verdiği kişi ID'si. Bu ID, `reportsTo` ilişkisini kurmak için kullanılır.
+  directReports User[]  @relation("UserReports") // Kullanıcının raporladığı kişiler. Kullanıcının yönettiği kişiler.
+  reportsTo     User?   @relation("UserReports", fields: [reportsToId], references: [id]) // Ters ilişki, kullanıcının rapor verdiği kişi.
+
+  // Kullanıcının yöneticilik yaparak onayladığı izinler
+  approvedTimeOffs TimeOffRequest[] @relation("ApprovedTimeOffs") // Kullanıcının onayladığı izin başvuruları.
+
+  contacts         Contact[] // Kullanıcının kişilerle ilişkisi. Kullanıcı ile ilgili kişisel veya profesyonel bağlantılar.
+  calendars        Calendar[] // Kullanıcının takvimleri. Kullanıcının etkinlikleri ve takvim verileri.
+  webhooks         Webhook[] // Kullanıcının sistemden aldığı webhooklar.
+  apiKeys          APIKey[] // Kullanıcının oluşturduğu API anahtarları.
+  createdMedia     Media[] // Kullanıcının oluşturduğu medya içerikleri. Profil resmi veya diğer medya dosyaları.
+  Department       Department[] // Kullanıcının ait olduğu departmanlar.
+  Message          Message[] // Kullanıcı tarafından gönderilen mesajlar.
+  Reaction         Reaction[] // Kullanıcı tarafından yapılan reaksiyonlar.
+  Mention          Mention[] // Kullanıcıya yapılan menşinler.
+  TimeEntry        TimeEntry[] // Kullanıcının yaptığı zaman girişleri.
+  WorkflowInstance WorkflowInstance[] // Kullanıcının dahil olduğu iş akışı örnekleri.
+  ActivityLog      ActivityLog[] // Kullanıcının aktiviteleri ve sistemdeki hareketleri.
+  File             File[] // Kullanıcı tarafından yüklenen dosyalar.
+  Report           Report[] // Kullanıcı tarafından oluşturulan raporlar.
+  Integration      Integration[] // Kullanıcının yaptığı entegrasyonlar.
+
+  @@index([isActive]) // Kullanıcıların aktiflik durumuna göre sorgular hızlandırılır.
+  @@index([lastLoginAt]) // Kullanıcıların son giriş zamanı sorguları hızlandırılır.
+  @@index([email]) // Kullanıcıların e-posta adresine göre hızlı arama yapılmasını sağlar.
+}
+
+model Media {
+  id           String    @id @default(cuid()) // Medya kimliği
+  url          String // Dosya URL'si
+  thumbnailUrl String? // Küçük resim URL'si
+  type         MediaType // Medya türü (resim, video vb.)
+  width        Int? // Genişlik (piksel)
+  height       Int? // Yükseklik (piksel)
+  size         Int // Dosya boyutu (byte)
+  duration     Int? // Süre (video/audio için - saniye)
+  altText      String? // Alternatif metin (erişilebilirlik)
+  caption      String? // Açıklama yazısı
+  createdBy    User      @relation(fields: [createdById], references: [id]) // Oluşturan kullanıcı
+  createdById  String // Oluşturan kullanıcı ID'si
+  createdAt    DateTime  @default(now()) // Oluşturulma zamanı
+
+  // Çok biçimli ilişkiler
+  userAvatar          User?   @relation("UserAvatar") // Kullanıcı avatarı
+  userCoverImage      User?   @relation("UserCoverImage") // Kullanıcı kapak resmi
+  organizationLogoId  String? @unique
+  organizationCoverId String? @unique
+
+  organizationLogo  Organization? @relation("OrganizationLogo")
+  organizationCover Organization? @relation("OrganizationCover")
+
+  projectCover       Project?            @relation("ProjectCover") // Proje kapak resmi
+  teamLogo           Team?               @relation("TeamLogo") // Takım logosu
+  taskAttachments    TaskAttachment[] // Görev ekleri
+  commentAttachments CommentAttachment[] // Yorum ekleri
+  mimeType           String? // örn: image/png, video/mp4
+
+  MessageAttachment MessageAttachment[]
+  attachedToId      String?
+  attachedToType    String? // örn. "Comment", "Message", "Task", "Event"
+
+  @@index([attachedToId, attachedToType])
+}
+
+enum MediaType {
+  IMAGE // Resim
+  VIDEO // Video
+  AUDIO // Ses
+  DOCUMENT // Belge
+  OTHER // Diğer
+}
+
+model Organization {
+  id        String  @id @default(cuid()) // Organizasyon kimliği
+  name      String // Organizasyon adı
+  legalName String? // Yasal ad (isteğe bağlı)
+  slug      String  @unique // URL dostu benzersiz tanımlayıcı
+  logoId    String? @unique
+  logo      Media?  @relation("OrganizationLogo", fields: [logoId], references: [id])
+
+  coverImageId String?   @unique
+  coverImage   Media?    @relation("OrganizationCover", fields: [coverImageId], references: [id])
+  description  String? // Açıklama
+  website      String? // Web sitesi
+  industry     String? // Endüstri/sektör
+  foundedYear  Int? // Kuruluş yılı
+  taxId        String? // Vergi kimlik numarası
+  size         OrgSize? // Organizasyon büyüklüğü
+  isPublic     Boolean   @default(false) // Herkese açık mı?
+  metadata     Json? // Ekstra veriler (JSON)
+  createdAt    DateTime  @default(now()) // Oluşturulma zamanı
+  updatedAt    DateTime  @updatedAt // Güncellenme zamanı
+  deletedAt    DateTime? // Silinme zamanı
+
+  // Sahiplik bilgisi
+  owner   User   @relation("OrganizationOwner", fields: [ownerId], references: [id]) // Sahip kullanıcı
+  ownerId String // Sahip kullanıcı ID'si
+
+  // İlişkiler
+  members      OrganizationMember[] // Üyeler
+  permissions  Permission[] // İzinler
+  projects     Project[] // Projeler
+  invitations  Invitation[] // Davetiyeler
+  teams        Team[] // Takımlar
+  billing      BillingInfo? // Faturalandırma bilgisi
+  settings     OrganizationSettings? // Ayarlar
+  departments  Department[] // Departmanlar
+  locations    Location[] // Lokasyonlar
+  customFields CustomField[] // Özel alanlar
+  webhooks     Webhook[] // Webhook'lar
+  apiKeys      APIKey[] // API anahtarları
+  workflows    Workflow[] // İş akışları
+  templates    Template[] // Şablonlar
+  reports      Report[] // Raporlar
+  Invoice      Invoice[]
+  AuditLog     AuditLog[]
+  Integration  Integration[]
+}
+
+enum OrgSize {
+  MICRO // Mikro (1-10)
+  SMALL // Küçük (11-50)
+  MEDIUM // Orta (51-250)
+  LARGE // Büyük (251-1000)
+  ENTERPRISE // Kurumsal (1000+)
+}
+
+model OrganizationMember {
+  id             String       @id @default(cuid()) // Üyelik kimliği
+  organization   Organization @relation(fields: [organizationId], references: [id]) // Organizasyon
+  organizationId String // Organizasyon ID'si
+  user           User         @relation(fields: [userId], references: [id]) // Kullanıcı
+  userId         String // Kullanıcı ID'si
+  role           OrgRole      @default(MEMBER) // Rol (varsayılan: Üye)
+  title          String? // Ünvan (isteğe bağlı)
+  department     Department?  @relation(fields: [departmentId], references: [id]) // Departman
+  departmentId   String? // Departman ID'si
+  location       Location?    @relation(fields: [locationId], references: [id]) // Lokasyon
+  locationId     String? // Lokasyon ID'si
+  joinedAt       DateTime     @default(now()) // Katılma zamanı
+  leftAt         DateTime? // Ayrılma zamanı
+  isPrimary      Boolean      @default(true) // Birincil organizasyon mu?
+  metadata       Json? // Ekstra veriler
+
+  @@unique([organizationId, userId]) // Organizasyon ve kullanıcı kombinasyonu benzersiz
+  @@index([userId, isPrimary])
+}
+
+enum OrgRole {
+  OWNER // Sahip
+  ADMIN // Yönetici
+  MEMBER // Üye
+  GUEST // Misafir
+  CUSTOM // Özel
+}
+
+model Department {
+  id   String  @id @default(cuid()) // Departman kimliği
+  name String // Departman adı
+  code String? // Departman kodu (isteğe bağlı)
+
+  // Organizasyon ilişkisi
+  organization   Organization @relation(fields: [organizationId], references: [id]) // Organizasyon
+  organizationId String // Organizasyon ID'si
+
+  // Yönetici ilişkisi
+  manager   User?   @relation(fields: [managerId], references: [id]) // Yönetici
+  managerId String? // Yönetici ID'si
+
+  // Self-relation (üst-alt departman)
+  parent   Department?  @relation("SubDepartments", fields: [parentId], references: [id]) // Üst departman
+  parentId String?
+  children Department[] @relation("SubDepartments") // Alt departmanlar
+
+  createdAt DateTime @default(now()) // Oluşturulma zamanı
+  updatedAt DateTime @updatedAt // Güncellenme zamanı
+
+  // Diğer ilişkiler
+  members OrganizationMember[] // Üyeler
+  teams   Team[] // Takımlar
+  @@unique([organizationId, name])
+  @@unique([organizationId, code])
+
+}
+
+model Location {
+  id             String       @id @default(cuid()) // Lokasyon kimliği
+  name           String // Lokasyon adı
+  address        String // Adres
+  city           String // Şehir
+  state          String? // Eyalet/bölge (isteğe bağlı)
+  country        String // Ülke
+  postalCode     String? // Posta kodu (isteğe bağlı)
+  timezone       String // Zaman dilimi
+  isHeadquarters Boolean      @default(false) // Genel merkez mi?
+  organization   Organization @relation(fields: [organizationId], references: [id]) // Organizasyon
+  organizationId String // Organizasyon ID'si
+  createdAt      DateTime     @default(now()) // Oluşturulma zamanı
+  updatedAt      DateTime     @updatedAt // Güncellenme zamanı
+
+  members OrganizationMember[] // Bu lokasyondaki üyeler
+}
+
+model Team {
+  id             String       @id @default(cuid())
+  name           String
+  description    String?
+  logo           Media?       @relation("TeamLogo", fields: [logoId], references: [id])
+  logoId         String?      @unique
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
+  department     Department?  @relation(fields: [departmentId], references: [id])
+  departmentId   String?
+  isPrivate      Boolean      @default(false)
+  color          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+
+  members  TeamMember[]
+  projects Project[]
+  channels Channel[]
+  Mention  Mention[]
+}
+
+model TeamMember {
+  id       String    @id @default(cuid())
+  team     Team      @relation(fields: [teamId], references: [id])
+  teamId   String
+  user     User      @relation(fields: [userId], references: [id])
+  userId   String
+  role     TeamRole  @default(MEMBER)
+  joinedAt DateTime  @default(now())
+  leftAt   DateTime?
+
+  @@unique([teamId, userId])
+}
+
+enum TeamRole {
+  LEADER
+  MANAGER
+  MEMBER
+  CONTRIBUTOR
+  GUEST
+}
+
+model Channel {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  team        Team      @relation(fields: [teamId], references: [id])
+  teamId      String
+  isPrivate   Boolean   @default(false)
+  isGeneral   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  messages Message[]
+}
+
+model Message {
+  id      String @id @default(cuid())
+  content String
+
+  // Kanal ve kullanıcı ilişkileri
+  channel   Channel @relation(fields: [channelId], references: [id])
+  channelId String
+  user      User    @relation(fields: [userId], references: [id])
+  userId    String
+
+  // Kendi kendine (self) ilişki
+  parent   Message?  @relation("MessageReplies", fields: [parentId], references: [id])
+  parentId String?
+  replies  Message[] @relation("MessageReplies")
+
+  // Diğer alanlar
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  reactions   Reaction[]
+  attachments MessageAttachment[]
+  mentions    Mention[]
+}
+
+model MessageAttachment {
+  id        String   @id @default(cuid())
+  message   Message  @relation(fields: [messageId], references: [id])
+  messageId String
+  media     Media    @relation(fields: [mediaId], references: [id])
+  mediaId   String
+  createdAt DateTime @default(now())
+}
+
+model Reaction {
+  id        String   @id @default(cuid())
+  emoji     String
+  message   Message  @relation(fields: [messageId], references: [id])
+  messageId String
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  createdAt DateTime @default(now())
+
+  @@unique([messageId, userId, emoji])
+}
+
+model Mention {
+  id        String   @id @default(cuid())
+  message   Message  @relation(fields: [messageId], references: [id])
+  messageId String
+  user      User?    @relation(fields: [userId], references: [id])
+  userId    String?
+  team      Team?    @relation(fields: [teamId], references: [id])
+  teamId    String?
+  createdAt DateTime @default(now())
+}
+
+model Project {
+  id             String        @id @default(cuid())
+  name           String
+  key            String        @unique
+  description    String?
+  coverImage     Media?        @relation("ProjectCover", fields: [coverImageId], references: [id])
+  coverImageId   String?       @unique // Buraya @unique ekliyoruz
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  organizationId String
+  team           Team?         @relation(fields: [teamId], references: [id])
+  teamId         String?
+  status         ProjectStatus @default(ACTIVE)
+  visibility     Visibility    @default(PRIVATE)
+  color          String        @default("#2563eb")
+  startDate      DateTime?
+  endDate        DateTime?
+  budget         Float?
+  progress       Float?        @default(0)
+  metadata       Json?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  deletedAt      DateTime?
+
+  // Relations
+  permissions  Permission[]
+  tasks        Task[]
+  taskLists    TaskList[]
+  files        File[]
+  comments     Comment[]
+  activityLogs ActivityLog[]
+  milestones   Milestone[]
+  labels       ProjectLabel[]
+  customFields ProjectCustomField[]
+  integrations ProjectIntegration[]
+  timeTracking TimeEntry[]
+  workflows    WorkflowInstance[]
+  Report       Report[]
+}
+
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  ARCHIVED
+  CANCELLED
+}
+
+enum Visibility {
+  PRIVATE
+  TEAM
+  ORGANIZATION
+  PUBLIC
+}
+
+model TaskList {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  project     Project  @relation(fields: [projectId], references: [id])
+  projectId   String
+  position    Int
+  isLocked    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tasks Task[]
+}
+
+model Task {
+  id                String     @id @default(cuid())
+  title             String
+  key               String     @unique
+  description       String?
+  taskList          TaskList?  @relation(fields: [taskListId], references: [id])
+  taskListId        String?
+  project           Project    @relation(fields: [projectId], references: [id])
+  projectId         String
+  status            TaskStatus @default(TODO)
+  priority          Priority   @default(MEDIUM)
+  type              TaskType?
+  dueDate           DateTime?
+  startDate         DateTime?
+  completedAt       DateTime?
+  estimatedDuration Int? // In minutes
+  creator           User       @relation("TaskCreator", fields: [creatorId], references: [id])
+  creatorId         String
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  deletedAt         DateTime?
+
+  // Relations
+  assignees    TaskAssignee[]
+  comments     Comment[]
+  attachments  TaskAttachment[]
+  subtasks     Subtask[]
+  labels       TaskLabel[]
+  dependencies TaskDependency[]       @relation("DependentTasks")
+  blocking     TaskDependency[]       @relation("BlockingTasks")
+  timeEntries  TimeEntry[]
+  customFields TaskCustomFieldValue[]
+  activityLogs ActivityLog[]
+  Milestone    Milestone?             @relation(fields: [milestoneId], references: [id])
+  milestoneId  String?
+}
+
+enum TaskStatus {
+  BACKLOG
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  DONE
+  BLOCKED
+  CANCELLED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum TaskType {
+  TASK
+  BUG
+  STORY
+  EPIC
+  FEATURE
+  IMPROVEMENT
+}
+
+model TaskAttachment {
+  id        String   @id @default(cuid())
+  task      Task     @relation(fields: [taskId], references: [id])
+  taskId    String
+  media     Media    @relation(fields: [mediaId], references: [id])
+  mediaId   String
+  createdAt DateTime @default(now())
+}
+
+model TaskDependency {
+  id          String         @id @default(cuid())
+  task        Task           @relation("DependentTasks", fields: [taskId], references: [id])
+  taskId      String
+  dependsOn   Task           @relation("BlockingTasks", fields: [dependsOnId], references: [id])
+  dependsOnId String
+  type        DependencyType @default(BLOCKS)
+  createdAt   DateTime       @default(now())
+
+  @@unique([taskId, dependsOnId])
+}
+
+enum DependencyType {
+  BLOCKS
+  RELATES_TO
+  DUPLICATES
+}
+
+model Milestone {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  project     Project   @relation(fields: [projectId], references: [id])
+  projectId   String
+  dueDate     DateTime
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tasks Task[]
+}
+
+model TimeEntry {
+  id          String    @id @default(cuid())
+  description String?
+  startTime   DateTime
+  endTime     DateTime?
+  duration    Int? // In minutes
+  task        Task?     @relation(fields: [taskId], references: [id])
+  taskId      String?
+  project     Project   @relation(fields: [projectId], references: [id])
+  projectId   String
+  user        User      @relation(fields: [userId], references: [id])
+  userId      String
+  isBillable  Boolean   @default(false)
+  billingRate Float?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Workflow {
+  id             String       @id @default(cuid())
+  name           String
+  description    String?
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
+  isActive       Boolean      @default(true)
+  steps          Json // JSON array of workflow steps
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  instances WorkflowInstance[]
+}
+
+model WorkflowInstance {
+  id          String         @id @default(cuid())
+  workflow    Workflow       @relation(fields: [workflowId], references: [id])
+  workflowId  String
+  project     Project        @relation(fields: [projectId], references: [id])
+  projectId   String
+  currentStep String
+  status      WorkflowStatus @default(RUNNING)
+  metadata    Json?
+  startedAt   DateTime       @default(now())
+  completedAt DateTime?
+  createdBy   User           @relation(fields: [createdById], references: [id])
+  createdById String
+
+  @@index([projectId])
+}
+
+enum WorkflowStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+  PAUSED
+  CANCELLED
+}
+
+// ... (Previous models like Permission, Invitation, Notification, etc. can be enhanced similarly)
+
+model CustomField {
+  id                   String                 @id @default(cuid())
+  name                 String
+  type                 CustomFieldType
+  organization         Organization           @relation(fields: [organizationId], references: [id])
+  organizationId       String
+  entityType           CustomFieldEntityType
+  isRequired           Boolean                @default(false)
+  defaultValue         String?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  ProjectCustomField   ProjectCustomField[]
+  TaskCustomFieldValue TaskCustomFieldValue[]
+
+  @@index([organizationId, entityType])
+}
+
+enum CustomFieldType {
+  TEXT
+  NUMBER
+  DATE
+  SELECT
+  CHECKBOX
+  URL
+  EMAIL
+}
+
+enum CustomFieldEntityType {
+  USER
+  ORGANIZATION
+  PROJECT
+  TASK
+  TEAM
+}
+
+model ProjectCustomField {
+  id            String      @id @default(cuid())
+  project       Project     @relation(fields: [projectId], references: [id])
+  projectId     String
+  customField   CustomField @relation(fields: [customFieldId], references: [id])
+  customFieldId String
+  value         String
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@unique([projectId, customFieldId])
+}
+
+model TaskCustomFieldValue {
+  id            String      @id @default(cuid())
+  task          Task        @relation(fields: [taskId], references: [id])
+  taskId        String
+  customField   CustomField @relation(fields: [customFieldId], references: [id])
+  customFieldId String
+  value         String
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@unique([taskId, customFieldId])
+}
+
+model Webhook {
+  id             String        @id @default(cuid())
+  name           String
+  url            String
+  secret         String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
+  user           User?         @relation(fields: [userId], references: [id])
+  userId         String?
+  events         String[] // Array of event types to listen for
+  isActive       Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+model APIKey {
+  id             String        @id @default(cuid())
+  name           String
+  key            String        @unique
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
+  user           User?         @relation(fields: [userId], references: [id])
+  userId         String?
+  scopes         String[]
+  expiresAt      DateTime?
+  lastUsedAt     DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+// Authentication and Security
+model Session {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  token     String   @unique
+  ipAddress String?
+  userAgent String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model TwoFactorMethod {
+  id         String        @id @default(cuid())
+  // Benzersiz tanımlayıcı. Her iki faktörlü doğrulama yöntemi için otomatik oluşturulan tekil kimlik.
+  
+  user       User          @relation(fields: [userId], references: [id])
+  // Kullanıcı ile ilişki. Bu iki faktörlü doğrulama yönteminin hangi kullanıcıya ait olduğunu belirtir.
+  
+  userId     String
+  // Kullanıcı kimliği. İlişkili kullanıcının ID'sini saklar.
+  
+  type       TwoFactorType
+  // Doğrulama türü. Kullanıcının seçtiği iki faktörlü doğrulama yöntemini belirtir (TOTP, SMS, EMAIL veya AUTHENTICATOR).
+  
+  secret     String
+  // Gizli anahtar. İki faktörlü doğrulama için kullanılan şifrelenmiş gizli anahtarı saklar.
+  // TOTP/Authenticator için QR kodunu oluşturmak için kullanılan anahtar, SMS/EMAIL için ise doğrulama kodlarını oluşturmak için kullanılan bir tohum değeri olabilir.
+  
+  isPrimary  Boolean       @default(false)
+  // Birincil yöntem mi? Kullanıcının birden fazla iki faktörlü doğrulama yöntemi olduğunda, hangisinin öncelikli olarak kullanılacağını belirtir.
+  
+  lastUsedAt DateTime?
+  // Son kullanım zamanı. Bu doğrulama yönteminin en son ne zaman kullanıldığını kaydeder. Null olabilir (hiç kullanılmadıysa).
+  
+  createdAt  DateTime      @default(now())
+  // Oluşturulma zamanı. Bu doğrulama yönteminin ne zaman eklendiğini kaydeder.
+  
+  tokens     TwoFactorToken[]
+  // İlişkili doğrulama jetonları. Bu yöntem için oluşturulan tüm tek kullanımlık doğrulama kodlarını içerir.
+
+  @@index([userId])
+  // Veritabanı indeksi. userId alanı üzerinde bir indeks oluşturarak, kullanıcıya göre sorgulama performansını artırır.
+}
+
+model TwoFactorToken {
+  id        String   @id @default(cuid())
+  // Benzersiz tanımlayıcı. Her doğrulama jetonu için otomatik oluşturulan tekil kimlik.
+  
+  userId    String
+  // Kullanıcı kimliği. Bu jetonun hangi kullanıcıya ait olduğunu belirtir.
+  
+  methodId  String
+  // Yöntem kimliği. Bu jetonun hangi iki faktörlü doğrulama yöntemine ait olduğunu belirtir.
+  
+  token     String
+  // Jeton değeri. Kullanıcıya gönderilen doğrulama kodunun şifrelenmiş hali.
+  
+  used      Boolean  @default(false)
+  // Kullanıldı mı? Jetonun daha önce kullanılıp kullanılmadığını belirtir. Güvenlik için her jeton yalnızca bir kez kullanılabilir.
+  
+  expiresAt DateTime
+  // Son geçerlilik tarihi. Jetonun ne zaman geçersiz olacağını belirtir (genellikle oluşturulduktan 5-15 dakika sonra).
+  
+  createdAt DateTime @default(now())
+  // Oluşturulma zamanı. Jetonun ne zaman oluşturulduğunu kaydeder.
+
+  user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Kullanıcı ile ilişki. Bu jetonun hangi kullanıcıya ait olduğunu belirtir.
+  // onDelete: Cascade - Kullanıcı silindiğinde, bu jetonu da otomatik olarak siler.
+  
+  method TwoFactorMethod @relation(fields: [methodId], references: [id], onDelete: Cascade)
+  // Doğrulama yöntemi ile ilişki. Bu jetonun hangi doğrulama yöntemine ait olduğunu belirtir.
+  // onDelete: Cascade - Doğrulama yöntemi silindiğinde, bu jetonu da otomatik olarak siler.
+
+  @@index([userId])
+  // Veritabanı indeksi. userId alanı üzerinde bir indeks oluşturarak, kullanıcıya göre sorgulama performansını artırır.
+  
+  @@index([methodId])
+  // Veritabanı indeksi. methodId alanı üzerinde bir indeks oluşturarak, doğrulama yöntemine göre sorgulama performansını artırır.
+}
+
+enum TwoFactorType {
+  SMS
+  // SMS ile doğrulama.
+  // Kullanıcının telefon numarasına gönderilen tek kullanımlık doğrulama kodları.
+  
+  EMAIL
+  // E-posta ile doğrulama.
+  // Kullanıcının e-posta adresine gönderilen tek kullanımlık doğrulama kodları.
+  
+  AUTHENTICATOR
+  // Kimlik doğrulayıcı uygulamalar.
+  // TOTP'ye benzer, ancak özellikle mobil kimlik doğrulayıcı uygulamalar için ayrılmış bir tür.
+  // Bazı sistemlerde TOTP ile aynı kategoride değerlendirilir.
+}
+
+model SocialAccount {
+  id           String    @id @default(cuid())
+  user         User      @relation(fields: [userId], references: [id])
+  userId       String
+  provider     String // e.g., "google", "github"
+  providerId   String
+  email        String?
+  name         String?
+  avatar       String?
+  accessToken  String?
+  refreshToken String?
+  expiresAt    DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@unique([provider, providerId])
+}
+
+// Permissions and Access Control
+model Permission {
+  id             String        @id @default(cuid())
+  name           String
+  code           String        @unique
+  description    String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
+  user           User?         @relation(fields: [userId], references: [id])
+  userId         String?
+  role           OrgRole?
+  createdAt      DateTime      @default(now())
+  Project        Project?      @relation(fields: [projectId], references: [id])
+  projectId      String?
+}
+
+// Invitations
+model Invitation {
+  id             String           @id @default(cuid())
+  email          String
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  organizationId String
+  inviter        User             @relation("Inviter", fields: [inviterId], references: [id])
+  inviterId      String
+  invitee        User?            @relation("Invitee", fields: [inviteeId], references: [id])
+  inviteeId      String?
+  role           OrgRole          @default(MEMBER)
+  token          String           @unique
+  expiresAt      DateTime
+  status         InvitationStatus @default(PENDING)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+// Notifications
+model Notification {
+  id                String           @id @default(cuid())
+  user              User             @relation(fields: [userId], references: [id])
+  userId            String
+  type              NotificationType
+  title             String
+  message           String
+  isRead            Boolean          @default(false)
+  metadata          Json?
+  relatedEntityType String? // e.g., "Task", "Project"
+  relatedEntityId   String?
+  createdAt         DateTime         @default(now())
+}
+
+enum NotificationType {
+  SYSTEM
+  TASK_ASSIGNED
+  MENTION
+  PROJECT_UPDATE
+  COMMENT
+  APPROVAL
+  REMINDER
+}
+
+// User Preferences
+model UserPreference {
+  id         String   @id @default(cuid())
+  user       User     @relation(fields: [userId], references: [id])
+  userId     String
+  preference String // e.g., "theme", "notifications"
+  value      String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, preference])
+}
+
+// Skills and Expertise
+model UserSkill {
+  id        String     @id @default(cuid())
+  user      User       @relation(fields: [userId], references: [id])
+  userId    String
+  skill     String
+  level     SkillLevel @default(INTERMEDIATE)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+enum SkillLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+}
+
+// Time Off Management
+// Time Off Management
+model TimeOffRequest {
+  id String @id @default(cuid())
+
+  // İzin isteyen kullanıcı
+  user   User   @relation("RequestedTimeOffs", fields: [userId], references: [id])
+  userId String
+
+  // Onaylayan yönetici
+  approver   User?   @relation("ApprovedTimeOffs", fields: [approverId], references: [id])
+  approverId String?
+
+  type       TimeOffType
+  startDate  DateTime
+  endDate    DateTime
+  status     ApprovalStatus @default(PENDING)
+  reason     String?
+  approvedAt DateTime?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+}
+
+enum TimeOffType {
+  VACATION
+  SICK
+  PERSONAL
+  PARENTAL
+  UNPAID
+  OTHER
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+// Contacts and CRM
+model Contact {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  firstName String
+  lastName  String
+  email     String?
+  phone     String?
+  company   String?
+  position  String?
+  notes     String?
+  tags      String[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Calendar and Scheduling
+model Calendar {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  name      String
+  color     String
+  isDefault Boolean  @default(false)
+  isPublic  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  events CalendarEvent[]
+}
+
+model CalendarEvent {
+  id          String      @id @default(cuid())
+  calendar    Calendar    @relation(fields: [calendarId], references: [id])
+  calendarId  String
+  title       String
+  description String?
+  start       DateTime
+  end         DateTime
+  isAllDay    Boolean     @default(false)
+  location    String?
+  recurrence  Json? // Recurrence rules
+  attendees   Json? // Array of attendee objects
+  reminders   Json? // Array of reminder settings
+  status      EventStatus @default(CONFIRMED)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+enum EventStatus {
+  CONFIRMED
+  TENTATIVE
+  CANCELLED
+}
+
+// Billing and Subscriptions
+model BillingInfo {
+  id             String        @id @default(cuid())
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  organizationId String        @unique
+  plan           String        @default("free")
+  status         BillingStatus @default(ACTIVE)
+  billingEmail   String?
+  taxId          String?
+  vatNumber      String?
+  address        Json?
+  paymentMethod  Json?
+  nextBillingAt  DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+enum BillingStatus {
+  ACTIVE
+  TRIAL
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+}
+
+model Invoice {
+  id             String        @id @default(cuid())
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  organizationId String
+  amount         Float
+  currency       String        @default("USD")
+  periodStart    DateTime
+  periodEnd      DateTime
+  status         InvoiceStatus @default(OPEN)
+  pdfUrl         String?
+  number         String        @unique
+  paidAt         DateTime?
+  createdAt      DateTime      @default(now())
+}
+
+enum InvoiceStatus {
+  DRAFT
+  OPEN
+  PAID
+  VOID
+  UNCOLLECTIBLE
+}
+
+// Audit Logging
+model AuditLog {
+  id             String        @id @default(cuid())
+  action         String
+  entityType     String?
+  entityId       String?
+  user           User?         @relation(fields: [userId], references: [id])
+  userId         String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
+  ipAddress      String?
+  userAgent      String?
+  metadata       Json?
+  createdAt      DateTime      @default(now())
+}
+
+// Comments and Activity
+model Comment {
+  id      String @id @default(cuid())
+  content String
+  user    User   @relation(fields: [userId], references: [id])
+  userId  String
+
+  parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  parentId String?
+  replies  Comment[] @relation("CommentReplies") // ← eksik olan buydu
+
+  entityType String // e.g., "Task", "Project"
+  entityId   String
+
+  attachments CommentAttachment[]
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  deletedAt   DateTime?
+
+  Project   Project? @relation(fields: [projectId], references: [id])
+  projectId String?
+
+  Task   Task?   @relation(fields: [taskId], references: [id])
+  taskId String?
+}
+
+model CommentAttachment {
+  id        String   @id @default(cuid())
+  comment   Comment  @relation(fields: [commentId], references: [id])
+  commentId String
+  media     Media    @relation(fields: [mediaId], references: [id])
+  mediaId   String
+  createdAt DateTime @default(now())
+}
+
+model ActivityLog {
+  id         String   @id @default(cuid())
+  action     String
+  user       User     @relation(fields: [userId], references: [id])
+  userId     String
+  entityType String // e.g., "Task", "Project"
+  entityId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  Project    Project? @relation(fields: [projectId], references: [id])
+  projectId  String?
+  Task       Task?    @relation(fields: [taskId], references: [id])
+  taskId     String?
+}
+
+// Task Management Extensions
+model Subtask {
+  id          String   @id @default(cuid())
+  title       String
+  task        Task     @relation(fields: [taskId], references: [id])
+  taskId      String
+  isCompleted Boolean  @default(false)
+  position    Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model TaskAssignee {
+  id         String   @id @default(cuid())
+  task       Task     @relation(fields: [taskId], references: [id])
+  taskId     String
+  user       User     @relation(fields: [userId], references: [id])
+  userId     String
+  assignedAt DateTime @default(now())
+
+  @@unique([taskId, userId])
+}
+
+model ProjectLabel {
+  id        String      @id @default(cuid())
+  name      String
+  color     String
+  project   Project     @relation(fields: [projectId], references: [id])
+  projectId String
+  createdAt DateTime    @default(now())
+  TaskLabel TaskLabel[]
+}
+
+model TaskLabel {
+  id        String       @id @default(cuid())
+  task      Task         @relation(fields: [taskId], references: [id])
+  taskId    String
+  label     ProjectLabel @relation(fields: [labelId], references: [id])
+  labelId   String
+  createdAt DateTime     @default(now())
+
+  @@unique([taskId, labelId])
+}
+
+// File Management
+model File {
+  id           String   @id @default(cuid())
+  name         String
+  path         String
+  type         String
+  size         Int
+  project      Project  @relation(fields: [projectId], references: [id])
+  projectId    String
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id])
+  uploadedById String
+  createdAt    DateTime @default(now())
+}
+
+// Templates
+model Template {
+  id             String       @id @default(cuid())
+  name           String
+  description    String?
+  type           TemplateType
+  content        Json // Template structure in JSON
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
+  isPublic       Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+enum TemplateType {
+  PROJECT
+  TASK
+  WORKFLOW
+  DOCUMENT
+  EMAIL
+}
+
+// Reports
+model Report {
+  id             String       @id @default(cuid())
+  name           String
+  type           ReportType
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
+  project        Project?     @relation(fields: [projectId], references: [id])
+  projectId      String?
+  filters        Json?
+  data           Json? // Cached report data
+  createdBy      User         @relation(fields: [createdById], references: [id])
+  createdById    String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+enum ReportType {
+  TIME_TRACKING
+  TASK_PROGRESS
+  BURNDOWN
+  TEAM_PERFORMANCE
+  FINANCIAL
+  CUSTOM
+}
+
+// Integrations
+model Integration {
+  id                 String               @id @default(cuid())
+  name               String
+  type               String
+  organization       Organization         @relation(fields: [organizationId], references: [id])
+  organizationId     String
+  user               User?                @relation(fields: [userId], references: [id])
+  userId             String?
+  config             Json // Encrypted configuration
+  isActive           Boolean              @default(true)
+  lastSyncAt         DateTime?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  ProjectIntegration ProjectIntegration[]
+}
+
+model ProjectIntegration {
+  id            String      @id @default(cuid())
+  project       Project     @relation(fields: [projectId], references: [id])
+  projectId     String
+  integration   Integration @relation(fields: [integrationId], references: [id])
+  integrationId String
+  config        Json?
+  isActive      Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model OrganizationSettings {
+  id             String       @id @default(cuid()) // Ayar kimliği
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String       @unique // Her organizasyon için tek ayar kaydı
+
+  darkMode      Boolean  @default(false) // Örnek ayar: karanlık mod
+  language      String   @default("en") // Örnek ayar: varsayılan dil
+  timezone      String? // Zaman dilimi
+  notifications Json? // Bildirim ayarları
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
